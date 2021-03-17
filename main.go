@@ -63,9 +63,9 @@ func main() {
 		res := <-resChan
 
 		if err != nil {
-			print(err)
+			print(err.Error())
 			stats[errorMessage] += 1
-			return
+			continue
 		}
 
 		res = strings.Trim(res, "\n ")
