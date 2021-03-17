@@ -10,6 +10,8 @@ import (
 	"strings"
 )
 
+const errorMessage = "failed"
+
 var (
 	count int
 	url   string
@@ -20,19 +22,19 @@ func init() {
 	flag.IntVar(&count, "count", 100, "Number of requests")
 }
 
-func request(address string) string {
+func request(address string) (string, error) {
 	resp, err := http.Get(address)
 	if err != nil {
-		return fmt.Sprintf("failed: %s", err)
+		return "", err
 	}
 	defer func() {
 		_ = resp.Body.Close()
 	}()
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		print(err)
+		return "", err
 	}
-	return string(body)
+	return string(body), nil
 }
 
 func main() {
@@ -44,21 +46,34 @@ func main() {
 	}
 
 	resChan := make(chan string, count)
+	errChan := make(chan error, count)
 	for i := 0; i < count; i++ {
 		go func() {
-			resChan <- request(url)
+			res, err := request(url)
+			errChan <- err
+			resChan <- res
 		}()
 	}
 
-	stats := make(map[string]int, 2)
+	stats := map[string]int{
+		errorMessage: 0,
+	}
 	for i := 0; i < count; i++ {
+		err := <-errChan
 		res := <-resChan
+
+		if err != nil {
+			print(err)
+			stats[errorMessage] += 1
+			return
+		}
+
 		res = strings.Trim(res, "\n ")
 		if _, ok := stats[res]; !ok {
 			stats[res] = 0
 		}
 		stats[res] += 1
 	}
-	msg, _ := json.MarshalIndent(stats, "", "  ")
-	fmt.Printf("%s", msg)
+	msg, _ := json.MarshalIndent(stats, "", "    ")
+	fmt.Printf("\n=======================\nResults:\n%s", msg)
 }
